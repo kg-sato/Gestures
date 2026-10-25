@@ -1,0 +1,20 @@
+{
+  "name": "gestures-studio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "python server.py",
+    "test": "node --test tests/*.test.mjs",
+    "test:browser": "node tests/browser.mjs",
+    "setup:model": "python scripts/setup_model.py"
+  },
+  "dependencies": {
+    "@mediapipe/tasks-vision": "1.1.1",
+    "cannon-es": "0.20.0",
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "playwright-core": "1.64.1"
+  }
+}

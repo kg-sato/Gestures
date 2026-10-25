@@ -1,0 +1,10 @@
+node_modules/
+.venv/
+.tools/
+build/
+__pycache__/
+*.pyc
+.env
+camera.local.json
+models/*.task
+firmware/**/secrets.h
