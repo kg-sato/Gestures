@@ -1,87 +1,65 @@
 import {BrowserCamera} from './webcam-source.js';
-import {HandTracker} from './workbench-hands.js';
-import {ARScene} from './ar-scene.js';
-const $=id=>document.getElementById(id);
-const cameraCanvas=$('camera'),context=cameraCanvas.getContext('2d');
-const field=new ARScene($('fx'));
-const tracker=new HandTracker();
-const metrics={inferenceMs:0,resultAgeMs:0,renderMs:0,frames:0,inferences:0,inferenceTotal:0,ageTotal:0};
-let connected=false,connecting=false,ready=false,paused=false,latest=null,pending=null;
-let generation=0,frameId=0,aspect=16/9,fps=0,lastCameraAt=0,lastHandAt=0,handCount=0;
-let trackerMessage='Loading tracker',cameraName='',lastTime=performance.now();
+import {DonutScene} from './donut-scene.js';
+import {DonutGestures} from './donut-gestures.js';
+import {ARCatch} from './ar-catch.js';
+import {SceneHistory} from './scene-document.js';
+import {defaultDonutDocument,validateDonutDocument} from './donut-document.js';
+const $=id=>document.getElementById(id),scene=new DonutScene($('fx')),history=new SceneHistory(40);
+const cameraCanvas=$('camera'),cameraContext=cameraCanvas.getContext('2d'),handsCanvas=$('hands'),handsContext=handsCanvas.getContext('2d');
+const metrics={frames:0,inferences:0,inferenceMs:0,resultAgeMs:0,renderMs:0,inferenceTotal:0};
+let connected=false,connecting=false,ready=false,worker=null,pending=null,latest=null,generation=0,frameId=0,aspect=16/9,fps=0,lastCameraAt=0,lastTime=performance.now(),trackerLabel='Loading tracker';
+let transaction=null,pointer=null,noticeTimer;const pointers=new Set();
 const active=()=>!document.hidden&&document.hasFocus();
-const worker=new Worker('/tracker-worker.js',{type:'module'});
-function resetInput(){generation++;lastHandAt=0;handCount=0;field.events(tracker.reset(performance.now()));field.cancel();}
-function status(message){$('status').title=`Camera ${Math.round(fps)} FPS; render CPU ${metrics.renderMs.toFixed(1)} ms; inference ${metrics.inferences?(metrics.inferenceTotal/metrics.inferences).toFixed(1):0} ms mean; result age ${metrics.inferences?(metrics.ageTotal/metrics.inferences).toFixed(1):0} ms mean; samples ${metrics.inferences}`;$('status').textContent=message||(!connected?'Camera off':!ready?trackerMessage:paused?'Frozen':handCount+' HAND'+(handCount===1?'':'S')+' · '+Math.round(fps)+' FPS');}
-function fit(width,height){aspect=width/height;tracker.aspect=aspect;cameraCanvas.width=width;cameraCanvas.height=height;document.documentElement.style.setProperty('--aspect',String(aspect));field.resize();resetInput();}
-function paintCamera(){context.clearRect(0,0,cameraCanvas.width,cameraCanvas.height);if(!latest)return;context.save();if($('mirror').checked){context.translate(cameraCanvas.width,0);context.scale(-1,1);}context.drawImage(latest,0,0,cameraCanvas.width,cameraCanvas.height);context.restore();}
-async function submit(bitmap,timestamp){
-  if(!ready||pending||!active())return;
-  const currentGeneration=generation,copy=await createImageBitmap(bitmap);
-  if(!connected||!active()||currentGeneration!==generation||pending){copy.close();return;}
-  pending={frame:++frameId,generation};
-  worker.postMessage({type:'frame',bitmap:copy,timestamp,id:pending},[copy]);
+function beginEdit(source){if(transaction?.source===source)return;finishEdit();transaction={source,before:scene.getDocument()};scene.orbit.autoRotate=false;}
+function finishEdit(){if(transaction){if(JSON.stringify(transaction.before)!==JSON.stringify(scene.getDocument()))history.checkpoint(transaction.before);transaction=null;}syncInputs();}
+const gestures=new DonutGestures({getShape:()=>scene.shape,onStart:()=>beginEdit('hand'),onChange:shape=>scene.setShape(shape),onEnd:()=>{if(transaction?.source==='hand')finishEdit();}});
+const catcher=new ARCatch({aspect,onEvent:event=>{if(event.type==='catch'){$('catch-score').classList.add('caught');setTimeout(()=>$('catch-score').classList.remove('caught'),600);}}});
+if(matchMedia('(max-width:800px)').matches)$('inspector').open=false;
+function message(text){$('notice').textContent=text;clearTimeout(noticeTimer);noticeTimer=setTimeout(()=>$('notice').textContent='',4500);}
+function stopPointer(){if(pointer){if(pointer.catchMode)catcher.pointerRelease(performance.now(),{cancel:true});const id=pointer.id;pointer=null;if($('fx').hasPointerCapture(id))$('fx').releasePointerCapture(id);finishEdit();}pointers.clear();}
+function resetInput(){generation++;gestures.reset(performance.now());stopPointer();catcher.reset({center:false});finishEdit();}
+function manualStart(source){generation++;gestures.reset(performance.now());stopPointer();beginEdit(source);}
+function edit(action){resetInput();const before=scene.getDocument();try{action();if(JSON.stringify(before)!==JSON.stringify(scene.getDocument()))history.checkpoint(before);}catch(error){message(error.message);}syncInputs();}
+function syncInputs(){const s=scene.shape,a=scene.appearance,set=(id,value)=>{if(document.activeElement!==$(id))$(id).value=value;};
+ set('radius',s.radius);set('tube',s.tube);set('twist',s.twist*180/Math.PI);set('ripple',s.ripple);$('tube').max=Math.min(.6,.6*s.radius);set('color',a.color);set('finish',a.finish);set('detail',s.detail);$('wire').checked=a.wire;$('turntable').checked=scene.orbit.autoRotate;
+ $('radius-value').value=s.radius.toFixed(2);$('tube-value').value=s.tube.toFixed(2);$('twist-value').value=Math.round(s.twist*180/Math.PI)+'°';$('ripple-value').value=Math.round(s.ripple*100)+'%';$('mesh-stats').value=scene.topology.triangleCount.toLocaleString()+' triangles · '+scene.topology.vertexCount.toLocaleString()+' vertices';
+ const catching=scene.pointerMode==='catch';document.body.classList.toggle('catch-mode',catching);$('catch-score').hidden=!catching;$('catch-score').value=catcher.state.catches+(catcher.state.catches===1?' catch · streak ':' catches · streak ')+catcher.state.streak;for(const key of ['radius','tube','twist','ripple','detail'])$(key).disabled=catching;$('gesture-tool').disabled=catching;$('reset').textContent=catching?'New round':'Reset';$('undo').disabled=catching||!history.canUndo;$('redo').disabled=catching||!history.canRedo;for(const mode of ['sculpt','orbit','catch']){$(mode).classList.toggle('active',scene.pointerMode===mode);$(mode).setAttribute('aria-pressed',String(scene.pointerMode===mode));}$('orbit').disabled=scene.cameraMode;$('turntable').disabled=catching;
+ const state=catching?catcher.state:gestures.status;$('gesture-status').value=catching?(!connected&&state.phase==='idle'?'Drag + flick donut · pinch to catch':state.label):connected?(ready?state.label:trackerLabel):(scene.pointerMode==='sculpt'?'Drag to sculpt · scroll to zoom':'Drag to orbit · scroll to zoom');document.body.classList.toggle('gesture-active',(catching?state.phase==='held':state.pinching>0)&&!state.paused);document.body.classList.toggle('tracking-paused',state.paused);
 }
-const camera=new BrowserCamera({
-  onFrame:async(bitmap,timestamp)=>{
-    if(!connected){bitmap.close();return;}
-    if(lastCameraAt){const current=1000/(timestamp-lastCameraAt);fps=fps?fps*.85+current*.15:current;}lastCameraAt=timestamp;
-    latest?.close();latest=bitmap;paintCamera();await submit(bitmap,timestamp);
-  },
-  onEnded:()=>{connected=false;resetInput();latest?.close();latest=null;paintCamera();$('connect').textContent='Connect camera';status('Camera disconnected');},
-  onError:error=>{resetInput();status('Camera error: '+error.message);}
-});
-worker.onmessage=({data})=>{
-  if(data.type==='ready'){ready=true;trackerMessage='Ready';status();return;}
-  if(data.type==='error'){ready=false;resetInput();status(data.message);return;}
-  if(data.type!=='result'&&data.type!=='frame-error')return;
-  if(!pending||pending.frame!==data.id.frame||pending.generation!==data.id.generation)return;
-  pending=null;
-  if(data.type==='frame-error'){resetInput();status('Tracking error');return;}
-  if(data.id.generation!==generation||!connected||!active())return;
-  const now=performance.now();
-  if(now-data.timestamp>700){resetInput();return;}
-  const hands=data.hands.map(hand=>({...hand,landmarks:hand.landmarks.map(p=>({...p,x:$('mirror').checked?1-p.x:p.x}))}));
-  const events=tracker.update(hands,now);field.setTrackingComplete(tracker.active.every(t=>t.lastSeen===now));field.events(events);handCount=tracker.count;lastHandAt=now;metrics.inferenceMs=data.inferenceMs;metrics.resultAgeMs=now-data.timestamp;metrics.inferences++;metrics.inferenceTotal+=data.inferenceMs;metrics.ageTotal+=now-data.timestamp;status();
-};
-worker.onerror=()=>{ready=false;pending=null;resetInput();status('Tracker failed. Reload to retry.');};
-worker.postMessage({type:'init'});
-async function devices(){
-  try{const list=(await navigator.mediaDevices?.enumerateDevices()||[]).filter(d=>d.kind==='videoinput'),selected=$('device').value;
-    $('device').replaceChildren(new Option('Default camera',''));
-    list.forEach((d,i)=>$('device').add(new Option(d.label||'Camera '+(i+1),d.deviceId)));
-    const preferred=list.find(d=>d.deviceId===selected)||list.find(d=>/Brio|Logitech/i.test(d.label));if(preferred)$('device').value=preferred.deviceId;
-  }catch(error){status('Camera list unavailable');}
-}
+function bindContinuous(id,action){const element=$(id);element.oninput=()=>{if(transaction?.source!==id)manualStart(id);try{action();}catch(error){message(error.message);}syncInputs();};element.onchange=finishEdit;element.onblur=()=>{if(transaction?.source===id)finishEdit();};}
+for(const key of ['radius','tube','ripple'])bindContinuous(key,()=>scene.setShape({[key]:Number($(key).value)}));bindContinuous('twist',()=>scene.setShape({twist:Number($('twist').value)*Math.PI/180}));bindContinuous('color',()=>scene.setAppearance({color:$('color').value}));
+$('finish').onchange=()=>{const finish=$('finish').value;edit(()=>scene.setAppearance({finish}));};$('detail').onchange=()=>{const detail=$('detail').value;edit(()=>scene.setShape({detail}));};$('wire').onchange=()=>{const wire=$('wire').checked;edit(()=>scene.setAppearance({wire}));};
+$('gesture-tool').onchange=()=>{resetInput();gestures.tool=$('gesture-tool').value;};
+for(const mode of ['sculpt','orbit','catch'])$(mode).onclick=()=>{resetInput();scene.setPointerMode(mode);if(mode==='catch'){catcher.reset({center:true});scene.catchState=catcher.state;}syncInputs();};
+$('fx').addEventListener('pointerdown',event=>{if(event.button!==0)return;pointers.add(event.pointerId);if(pointers.size>1){if(pointer){if(pointer.catchMode)catcher.pointerRelease(performance.now(),{cancel:true});const id=pointer.id;pointer=null;if($('fx').hasPointerCapture(id))$('fx').releasePointerCapture(id);finishEdit();}return;}if(scene.pointerMode==='catch'){gestures.reset(performance.now());const rect=$('fx').getBoundingClientRect();catcher.pointerGrab({x:(event.clientX-rect.left)/rect.width,y:(event.clientY-rect.top)/rect.height},performance.now());if(catcher.state.owner==='mouse'){pointer={id:event.pointerId,catchMode:true};$('fx').setPointerCapture(event.pointerId);}return;}if(scene.pointerMode!=='sculpt')return;generation++;gestures.reset(performance.now());beginEdit('pointer');pointer={id:event.pointerId,x:event.clientX,y:event.clientY,shape:{...scene.shape}};$('fx').setPointerCapture(event.pointerId);});
+$('fx').addEventListener('pointermove',event=>{if(!pointer||pointer.id!==event.pointerId)return;const r=$('fx').getBoundingClientRect();if(pointer.catchMode){catcher.pointerMove({x:(event.clientX-r.left)/r.width,y:(event.clientY-r.top)/r.height},performance.now());return;}const dx=(event.clientX-pointer.x)/r.width,dy=(pointer.y-event.clientY)/r.height;const patch={radius:pointer.shape.radius+dx*1.3,[gestures.tool]:pointer.shape[gestures.tool]+dy*(gestures.tool==='tube'?.9:2)};scene.setShape({...pointer.shape,...patch});syncInputs();});
+function pointerEnd(event){pointers.delete(event.pointerId);if(pointer?.id===event.pointerId){if(pointer.catchMode)catcher.pointerRelease(performance.now(),{cancel:event.type!=='pointerup'});const id=pointer.id;pointer=null;if($('fx').hasPointerCapture(id))$('fx').releasePointerCapture(id);finishEdit();}}
+$('fx').addEventListener('pointerup',pointerEnd);$('fx').addEventListener('pointercancel',pointerEnd);$('fx').addEventListener('lostpointercapture',pointerEnd);
+$('home').onclick=()=>{resetInput();scene.home();syncInputs();};$('turntable').onchange=()=>{const rotate=$('turntable').checked;resetInput();scene.orbit.autoRotate=rotate&&!scene.cameraMode;syncInputs();};
+$('reset').onclick=()=>{if(scene.pointerMode==='catch'){resetInput();catcher.reset({center:true});scene.catchState=catcher.state;syncInputs();}else edit(()=>scene.loadDocument(defaultDonutDocument()));};$('undo').onclick=()=>{resetInput();const d=history.undo(scene.getDocument());if(d)scene.loadDocument(d);syncInputs();};$('redo').onclick=()=>{resetInput();const d=history.redo(scene.getDocument());if(d)scene.loadDocument(d);syncInputs();};
+function status(text){$('status').textContent=text||(!connected?'Camera off':!ready?trackerLabel:Math.round(fps)+' FPS · '+(scene.pointerMode==='catch'?catcher.state.points.length:gestures.status.handCount)+' hands');$('status').title=`Inference ${metrics.inferences?(metrics.inferenceTotal/metrics.inferences).toFixed(1):0} ms mean; render CPU ${metrics.renderMs.toFixed(1)} ms; result age ${metrics.resultAgeMs.toFixed(1)} ms; ${metrics.inferences} samples`;}
+function fit(width,height){aspect=width/height;gestures.aspect=aspect;catcher.aspect=aspect;cameraCanvas.width=width;cameraCanvas.height=height;document.documentElement.style.setProperty('--aspect',String(aspect));scene.resize();resizeHands();resetInput();}
+function paintCamera(){cameraContext.clearRect(0,0,cameraCanvas.width,cameraCanvas.height);if(!latest)return;cameraContext.save();if($('mirror').checked){cameraContext.translate(cameraCanvas.width,0);cameraContext.scale(-1,1);}cameraContext.drawImage(latest,0,0,cameraCanvas.width,cameraCanvas.height);cameraContext.restore();}
+async function submit(bitmap,timestamp){if(!ready||pending||!active())return;const currentGeneration=generation,copy=await createImageBitmap(bitmap,{resizeWidth:640,resizeHeight:Math.round(640/aspect),resizeQuality:'low'});if(!connected||!active()||generation!==currentGeneration||pending){copy.close();return;}pending={frame:++frameId,generation};worker.postMessage({type:'frame',bitmap:copy,timestamp,id:pending},[copy]);}
+function initializeTracker(){if(worker)return;worker=new Worker('./tracker-worker.js',{type:'module'});worker.onmessage=({data})=>{
+ if(data.type==='ready'){ready=true;trackerLabel='Ready';status();return;}if(data.type==='error'){ready=false;trackerLabel=data.message;resetInput();status();return;}
+ if(data.type!=='result'&&data.type!=='frame-error')return;if(!pending||pending.frame!==data.id.frame||pending.generation!==data.id.generation)return;pending=null;
+ if(data.type==='frame-error'){resetInput();status('Tracking error');return;}if(data.id.generation!==generation||!connected||!active())return;const now=performance.now();if(now-data.timestamp>500){resetInput();return;}
+ const hands=data.hands.map(hand=>({...hand,landmarks:hand.landmarks.map(p=>({...p,x:$('mirror').checked?1-p.x:p.x}))}));if(scene.pointerMode==='catch')catcher.update(hands,now);else if(!transaction||transaction.source==='hand')gestures.update(hands,now);metrics.inferenceMs=data.inferenceMs;metrics.resultAgeMs=now-data.timestamp;metrics.inferenceTotal+=data.inferenceMs;metrics.inferences++;status();
+ };worker.onerror=()=>{ready=false;pending=null;trackerLabel='Tracker failed. Reload to retry.';resetInput();status();};worker.postMessage({type:'init'});}
+const camera=new BrowserCamera({onFrame:async(bitmap,timestamp)=>{if(!connected){bitmap.close();return;}if(lastCameraAt){const current=1000/(timestamp-lastCameraAt);fps=fps?fps*.85+current*.15:current;}lastCameraAt=timestamp;latest?.close();latest=bitmap;paintCamera();await submit(bitmap,timestamp);},onEnded:()=>{disconnect();status('Camera disconnected');},onError:error=>{resetInput();status('Camera error: '+error.message);}});
+async function devices(){try{const list=(await navigator.mediaDevices?.enumerateDevices()||[]).filter(d=>d.kind==='videoinput'),selected=$('device').value;$('device').replaceChildren(new Option('Default camera',''));list.forEach((d,i)=>$('device').add(new Option(d.label||'Camera '+(i+1),d.deviceId)));const preferred=list.find(d=>d.deviceId===selected)||list.find(d=>/Brio|Logitech/i.test(d.label));if(preferred)$('device').value=preferred.deviceId;}catch{status('Camera list unavailable');}}
 function disconnect(){camera.stop();connected=false;connecting=false;resetInput();latest?.close();latest=null;paintCamera();$('connect').textContent='Connect camera';fps=0;lastCameraAt=0;status();}
-$('connect').onclick=async()=>{
-  if(connected||connecting){disconnect();return;}
-  connecting=true;$('connect').textContent='Cancel';status('Requesting camera…');
-  try{
-    const info=await camera.start($('device').value);if(!info)return;
-    connected=true;connecting=false;cameraName=info.label;fit(info.width,info.height);
-    $('connect').textContent='Disconnect';await devices();status();
-  }catch(error){disconnect();status(error.name==='NotAllowedError'?'Camera permission denied':error.message);}
-};
-$('device').onchange=()=>{if(connected)disconnect();};
-$('add').onclick=()=>{field.add($('object').value);syncInputs();};
-$('gravity').onchange=()=>{field.model.gravity=$('gravity').checked;};
-$('depth').oninput=()=>field.setDepth(Number($('depth').value));
-$('detach').onclick=()=>{resetInput();field.detach();syncInputs();};
-$('delete').onclick=()=>{resetInput();field.delete();syncInputs();};
-$('mirror').onchange=()=>{resetInput();paintCamera();};
-$('pause').onclick=()=>{paused=!paused;field.model.frozen=paused;resetInput();$('pause').textContent=paused?'Resume':'Freeze';$('pause').setAttribute('aria-pressed',String(paused));document.body.classList.toggle('paused',paused);status();};
-$('reset').onclick=()=>{resetInput();field.reset();syncInputs();};
-function syncInputs(){const part=field.model.parts.get(field.selected);$('detach').disabled=!part;$('delete').disabled=!part;$('depth').disabled=!part;$('add').disabled=field.model.parts.size>=12;if(part)$('depth').value=field.model.assemblyFor(part.id).body.position.z;}
-$('tutorial').onclick=()=>$('guide').showModal();$('close-guide').onclick=()=>$('guide').close();
-$('guide').addEventListener('click',event=>{if(event.target===$('guide')){const r=$('guide').getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)$('guide').close();}});
-$('fullscreen').onclick=()=>{if(document.fullscreenElement)document.exitFullscreen();else document.documentElement.requestFullscreen().catch(()=>status('Fullscreen unavailable'));};
-window.addEventListener('resize',()=>field.resize());
-window.addEventListener('blur',resetInput);document.addEventListener('visibilitychange',resetInput);
-window.addEventListener('beforeunload',()=>{camera.stop();worker.terminate();latest?.close();field.dispose();});
-document.addEventListener('keydown',event=>{if(['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName))return;if(event.code==='Space'){event.preventDefault();$('pause').click();}else if(event.key.toLowerCase()==='r')$('reset').click();else if(event.key==='Delete')$('delete').click();});
-function animate(now){const dt=(now-lastTime)/1000;lastTime=now;field.events(tracker.tick(now));const started=performance.now();field.render(dt);metrics.renderMs=metrics.renderMs*.9+(performance.now()-started)*.1;metrics.frames++;syncInputs();requestAnimationFrame(animate);}
-requestAnimationFrame(animate);setInterval(()=>{if(!connecting)status();},700);devices();
-
-// Local diagnostics for local verification; no remote telemetry.
-window.workbench={field,tracker,metrics,get camera(){return camera;}};
+function view(cameraMode){message('');if(!cameraMode)disconnect();resetInput();document.body.classList.toggle('camera-mode',cameraMode);document.body.classList.toggle('studio-mode',!cameraMode);for(const [id,on] of [['studio',!cameraMode],['camera-view',cameraMode]]){$(id).classList.toggle('active',on);$(id).setAttribute('aria-pressed',String(on));}document.querySelector('.camera-inputs').hidden=!cameraMode;scene.setCameraMode(cameraMode);resizeHands();syncInputs();}
+$('studio').onclick=()=>view(false);$('camera-view').onclick=()=>{view(true);devices();};$('connect').onclick=async()=>{if(connected||connecting){disconnect();return;}connecting=true;$('connect').textContent='Cancel';status('Requesting camera…');initializeTracker();try{const info=await camera.start($('device').value);if(!info)return;connected=true;connecting=false;fit(info.width,info.height);$('connect').textContent='Disconnect';await devices();status();}catch(error){disconnect();status(error.name==='NotAllowedError'?'Camera permission denied':error.message);}};navigator.mediaDevices?.addEventListener('devicechange',()=>{if(!connected&&!connecting)devices();});$('device').onchange=()=>{if(connected)disconnect();};$('mirror').onchange=()=>{resetInput();paintCamera();};
+function resizeHands(){const r=$('fx').getBoundingClientRect();handsCanvas.width=Math.round(r.width);handsCanvas.height=Math.round(r.height);catcher.aspect=Math.max(.2,r.width/Math.max(1,r.height));}
+function drawHands(){handsContext.clearRect(0,0,handsCanvas.width,handsCanvas.height);if(!connected&&scene.pointerMode!=='catch')return;const catching=scene.pointerMode==='catch',s=catching?catcher.state:gestures.status,p=s.points;handsContext.lineWidth=1.5;if(catching){const trail=s.trail;if(trail.length>1){handsContext.beginPath();trail.forEach((a,i)=>i?handsContext.lineTo(a.x*handsCanvas.width,a.y*handsCanvas.height):handsContext.moveTo(a.x*handsCanvas.width,a.y*handsCanvas.height));handsContext.strokeStyle='#f3cda066';handsContext.lineWidth=3;handsContext.stroke();}if(s.phase==='flying')for(const a of p)if(a.pinching&&a.id!==s.owner){handsContext.beginPath();handsContext.arc(a.x*handsCanvas.width,a.y*handsCanvas.height,.12*handsCanvas.height,0,Math.PI*2);handsContext.strokeStyle='#b3e9cf70';handsContext.setLineDash([4,6]);handsContext.stroke();handsContext.setLineDash([]);}}if(!catching&&p.length===2&&p.every(a=>a.pinching)){handsContext.strokeStyle=s.paused?'#efbd88aa':'#b3e9cf80';handsContext.beginPath();handsContext.moveTo(p[0].x*handsCanvas.width,p[0].y*handsCanvas.height);handsContext.lineTo(p[1].x*handsCanvas.width,p[1].y*handsCanvas.height);handsContext.stroke();}for(const a of p){const x=a.x*handsCanvas.width,y=a.y*handsCanvas.height;handsContext.beginPath();handsContext.arc(x,y,a.pinching?12:7,0,Math.PI*2);handsContext.strokeStyle=s.paused?'#efbd88':a.pinching?'#c3f7d7':'#ffffff99';handsContext.fillStyle=a.pinching?'#b3e9cf30':'#ffffff0d';handsContext.fill();handsContext.stroke();}}
+function download(data,name,type){const url=URL.createObjectURL(data instanceof Blob?data:new Blob([data],{type})),link=document.createElement('a');link.href=url;link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(url),30000);}
+$('tutorial').onclick=()=>$('guide').showModal();$('close-guide').onclick=()=>$('guide').close();$('export').onclick=()=>$('export-guide').showModal();$('close-export').onclick=()=>$('export-guide').close();
+$('save-scene').onclick=()=>{resetInput();download(JSON.stringify(scene.getDocument(),null,2),'gestures-donut.json','application/json');};$('load-scene').onclick=()=>$('scene-file').click();$('scene-file').onchange=async()=>{const file=$('scene-file').files[0];if(!file)return;try{if(file.size>65536)throw Error('Choose a Donut Lab scene smaller than 64 KB.');const document=validateDonutDocument(JSON.parse(await file.text()));edit(()=>scene.loadDocument(document));$('export-guide').close();}catch(error){message(error.message);}$('scene-file').value='';};
+$('save-glb').onclick=async()=>{resetInput();$('save-glb').disabled=true;try{download(await scene.exportGLB(),'gestures-donut.glb','model/gltf-binary');}catch(error){message('Export failed: '+error.message);}finally{$('save-glb').disabled=false;}};
+$('save-image').onclick=()=>{resetInput();scene.settle();const canvas=document.createElement('canvas');canvas.width=$('fx').width;canvas.height=$('fx').height;const ctx=canvas.getContext('2d'),gradient=ctx.createRadialGradient(canvas.width*.4,canvas.height*.4,0,canvas.width*.4,canvas.height*.4,canvas.width);gradient.addColorStop(0,'#263735');gradient.addColorStop(1,'#101619');ctx.fillStyle=gradient;ctx.fillRect(0,0,canvas.width,canvas.height);if(connected)ctx.drawImage(cameraCanvas,0,0,canvas.width,canvas.height);ctx.drawImage($('fx'),0,0);canvas.toBlob(blob=>{if(blob)download(blob,'gestures-donut.png','image/png');});};
+$('fullscreen').onclick=()=>{if(document.fullscreenElement)document.exitFullscreen();else document.documentElement.requestFullscreen().catch(()=>message('Fullscreen unavailable'));};window.addEventListener('resize',()=>{scene.resize();resizeHands();});window.addEventListener('blur',resetInput);document.addEventListener('visibilitychange',resetInput);window.addEventListener('beforeunload',()=>{camera.stop();worker?.terminate();latest?.close();scene.dispose();});
+document.addEventListener('keydown',event=>{if(document.querySelector('dialog[open]')||['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName))return;const key=event.key.toLowerCase();if((event.ctrlKey||event.metaKey)&&key==='z'){event.preventDefault();event.shiftKey?$('redo').click():$('undo').click();}else if((event.ctrlKey||event.metaKey)&&key==='y'){event.preventDefault();$('redo').click();}else if(key==='r')$('reset').click();else if(key==='s')$('sculpt').click();else if(key==='c')$('catch').click();else if(key==='v'&&!scene.cameraMode)$('orbit').click();});
+function animate(now){const dt=(now-lastTime)/1000;lastTime=now;if(scene.pointerMode==='catch'){catcher.tick(now);scene.catchState=catcher.state;}else gestures.tick(now);const start=performance.now();scene.render(dt);metrics.renderMs=metrics.renderMs*.9+(performance.now()-start)*.1;metrics.frames++;drawHands();syncInputs();requestAnimationFrame(animate);}resizeHands();syncInputs();requestAnimationFrame(animate);setInterval(()=>{if(!connecting)status();},700);
+window.donutLab={scene,gestures,catcher,history,metrics,get camera(){return camera;},get transaction(){return transaction;}};

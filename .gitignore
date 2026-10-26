@@ -8,3 +8,4 @@ __pycache__/
 camera.local.json
 models/*.task
 firmware/**/secrets.h
+dist/

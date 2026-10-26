@@ -1,5 +1,8 @@
 """Gestures local studio: USB camera bridge and private, same-origin static assets."""
 import argparse
+import base64
+import hashlib
+import re
 import hmac
 import json
 import mimetypes
@@ -13,7 +16,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 ROOT = Path(__file__).resolve().parent
 MAX_REQUEST = 4096
 STATIC = {"/": ROOT / "web/index.html"}
-for name in ("index.html", "style.css", "app.js", "tracker-worker.js", "gesture-engine.js", "webcam-source.js", "ar-controls.js", "ar-scene.js", "workbench-model.js", "workbench-hands.js"):
+for name in ("index.html", "style.css", "app.js", "tracker-worker.js", "gesture-engine.js", "webcam-source.js", "ar-controls.js", "ar-scene.js", "workbench-model.js", "workbench-hands.js", "art-meshes.js", "art-presets.js", "studio-editor.js", "scene-document.js", "favicon.svg", "donut-shape.js", "donut-scene.js", "donut-gestures.js", "donut-document.js", "ar-catch.js"):
     STATIC["/" + name] = ROOT / "web" / name
 STATIC["/models/hand_landmarker.task"] = ROOT / "models/hand_landmarker.task"
 STATIC["/node_modules/cannon-es/dist/cannon-es.js"] = ROOT / "node_modules/cannon-es/dist/cannon-es.js"
@@ -21,6 +24,10 @@ VISION = ROOT / "node_modules/@mediapipe/tasks-vision"
 STATIC["/vendor/vision_bundle.mjs"] = VISION / "vision_bundle.mjs"
 for name in ("three.module.js", "three.core.js"):
     STATIC["/vendor/three/" + name] = ROOT / "node_modules/three/build" / name
+for name in ("controls/OrbitControls.js", "controls/TransformControls.js", "exporters/GLTFExporter.js", "environments/RoomEnvironment.js"):
+    STATIC["/vendor/addons/" + name] = ROOT / "node_modules/three/examples/jsm" / name
+IMPORT_MAP = re.search(r'<script type="importmap">(.*?)</script>', (ROOT / "web/index.html").read_text(encoding="utf-8"), re.S).group(1)
+IMPORT_MAP_HASH = base64.b64encode(hashlib.sha256(IMPORT_MAP.encode()).digest()).decode()
 for file in (VISION / "wasm").glob("*"):
     if file.suffix in (".js", ".wasm"):
         STATIC["/vendor/wasm/" + file.name] = file
@@ -155,7 +162,7 @@ def make_server(port=8765, broker=None):
             for key, value in {"Content-Type": kind, "Content-Length": str(len(body)),
                                "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
                                "Referrer-Policy": "no-referrer", "X-Frame-Options": "DENY",
-                               "Content-Security-Policy": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self'; img-src 'self' blob: data:; style-src 'self'; object-src 'none'; frame-ancestors 'none'",
+                               "Content-Security-Policy": f"default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-{IMPORT_MAP_HASH}'; worker-src 'self'; connect-src 'self'; img-src 'self' blob: data:; style-src 'self'; object-src 'none'; frame-ancestors 'none'",
                                **(extra or {})}.items():
                 self.send_header(key, value)
             self.end_headers()

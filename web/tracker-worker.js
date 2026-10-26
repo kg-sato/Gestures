@@ -6,16 +6,16 @@
  * serialized inference and small normalized results for the Gestures studio.
  * Licensed under Apache-2.0; see licenses/Apache-2.0.txt.
  */
-import { FilesetResolver, HandLandmarker } from '/vendor/vision_bundle.mjs';
+import { FilesetResolver, HandLandmarker } from './vendor/vision_bundle.mjs';
 
 let landmarker;
 let loading;
 async function initialize() {
-  const vision = await FilesetResolver.forVisionTasks('/vendor/wasm', true);
+  const vision = await FilesetResolver.forVisionTasks(new URL('./vendor/wasm',import.meta.url).href, true);
   // Module workers need the ES-module WASM loader. Restore its exported factory
   // before each attempt because MediaPipe consumes the global and imports cache.
   const {default:factory} = await import(vision.wasmLoaderPath);
-  const options = {baseOptions:{modelAssetPath:'/models/hand_landmarker.task',delegate:'GPU'},
+  const options = {baseOptions:{modelAssetPath:new URL('./models/hand_landmarker.task',import.meta.url).href,delegate:'GPU'},
     runningMode:'VIDEO', numHands:2, minHandDetectionConfidence:0.65,
     minHandPresenceConfidence:0.65, minTrackingConfidence:0.65};
   try {

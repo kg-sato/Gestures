@@ -7,7 +7,11 @@
     "start": "python server.py",
     "test": "node --test tests/*.test.mjs",
     "test:browser": "node tests/browser.mjs",
-    "setup:model": "python scripts/setup_model.py"
+    "setup:model": "python scripts/setup_model.py",
+    "build": "node scripts/build.mjs",
+    "test:art-browser": "node tests/art-browser.mjs",
+    "test:donut-browser": "node tests/donut-browser.mjs",
+    "test:catch-browser": "node tests/ar-catch-browser.mjs"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "1.1.1",

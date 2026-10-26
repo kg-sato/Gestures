@@ -153,3 +153,67 @@ live hand input changed the workbench selection/transform. This improves the ear
 1 FPS observation; foreground responsiveness is still a limited sample, not a
 repeatable benchmark or total camera-to-display latency measurement. Human confirmation
 of grab/toss/snap/detach and tracking feel remains pending.
+
+## 2026-10-25 — Spatial Art Studio
+
+User chose Abstract digital art for the portfolio direction. Expanded the existing
+Three.js renderer with OrbitControls, TransformControls, physical materials,
+local RoomEnvironment reflections, shadows, six procedural forms, per-axis dimension
+editing, explicit transforms, a turntable, three authored compositions, undo/redo,
+duplication and export/import controls. Studio opens without camera permission;
+Live camera preserves the hand workbench. Physics starts paused for the composition,
+with hand/direct editing still available; Play physics enables simulation.
+
+Added a self-contained static distribution build to dist/ (ignored by Git), with
+relative asset paths, local hand model and libraries. Browser checks confirm it
+runs under /Gestures/ without the Python backend. The worker resolves WASM/model
+URLs from import.meta.url so nested hosting works. The local server adds only exact
+static routes and an exact import-map CSP hash; USB access behavior stays unchanged.
+
+Verification on this implementation: 16 art browser checks pass locally and under
+/Gestures/, including actual transform-handle dragging, parametric editing, materials,
+undo/redo, JSON round-trip, GLB binary structure, PNG, generated camera, physics controls,
+mobile layout, shutdown, and no external runtime requests. The 12 existing hand/assembly
+browser checks pass with updated studio defaults. Actual Brio hand feel for the new
+art UI is not verified in this task. Generated webcam checks are distinct evidence.
+
+Changes are prepared locally for review. This task does not commit, push or deploy them.
+
+Final checks: 54 JavaScript tests, 17 Python tests, 16 art browser checks locally
+and in the static subpath build, plus 12 hand/assembly browser regression checks.
+Interrupted gizmo drags release without snapping; Depth edits are undoable; shadow
+render targets are disposed with the scene. Preview is running on localhost:8765.
+
+## 2026-10-25 — Donut Lab and AR Catch
+
+User requested removal of other parts and gestures that deform the donut, then
+confirmed the revised controls were much better. Active page now has one periodic
+torus surface, gesture-driven thickness/radius/twist/ripple, explicit mesh detail
+and wire topology, filtered/debounced batched input, safe loss recovery and distinct
+mouse sculpt/orbit ownership. Prior studio sources live in design/spatial-art-studio/.
+
+User then requested online research and a hand-to-hand AR Catch feature. Added a
+separate Catch mode for the same donut, using buffered release velocity, fixed-step
+flight, gravity/bounces, receiving-hand proximity and swept path catch tests,
+trail/score/streak, a mouse throw option and safe cancellation on loss/blur/disconnect.
+Sculpt geometry is preserved across Catch mode. Research references and adaptation
+notes are in docs/research/AR-CATCH.md (Meta, Three.js and versioned A-Frame examples).
+No SDK or external runtime service was introduced.
+
+Current checks: 94 JavaScript unit tests, 17 Python server/protocol tests, 16 donut
+browser checks and 9 AR Catch browser checks pass. Static /Gestures/ build also passes
+Catch's 9 checks and the core sculpting suite (15 checks before the added hologram
+regression assertion). Browser tests verify actual pointer throws, simulated raw-hand
+handoff, swept catches, renderer projection, score/reset, sculpt preservation, generated
+MediaPipe input, camera shutdown, exports, mobile fit and no external runtime requests.
+Results are in ignored build/donut-browser-results.json and ar-catch-browser-results.json.
+
+Live sculpt sample: Brio showed15 FPS, 2 hands, 10.7 ms mean inference over1959 samples;
+user confirmed the control improvement. AR Catch's physical Brio handoff remains
+unverified: browser no longer listed the Brio at handoff time (only virtual cameras).
+Requested reconnection in chat and sent the authorized desktop notification; Windows
+reports it enabled and present in notification history. The preview is left ready in
+Live camera / AR Catch. Current donut settings were saved under ignored
+build/donut-before-ar-catch.json and restored through the controls before refreshing.
+
+Static build is prepared in dist/. All current changes remain local and uncommitted.
