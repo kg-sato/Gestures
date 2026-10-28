@@ -5,7 +5,5 @@ if not exist ".venv\Scripts\python.exe" (
   pause
   exit /b 1
 )
-echo Open http://127.0.0.1:8765 in your browser.
-echo Camera access remains held until the overheating issue is checked.
-".venv\Scripts\python.exe" server.py
-pause
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\open-studio.ps1"
+if errorlevel 1 pause

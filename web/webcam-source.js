@@ -10,7 +10,19 @@ export class BrowserCamera {
     if(!navigator.mediaDevices?.getUserMedia)throw Error('This browser does not expose webcams. Open the studio in Firefox, Chrome or Edge on this PC.');
     const video={width:{ideal:1280},height:{ideal:720},frameRate:{ideal:30,max:30}};
     if(deviceId)video.deviceId={exact:deviceId};
-    const stream=await navigator.mediaDevices.getUserMedia({video,audio:false});
+    let stream;
+    try {stream=await navigator.mediaDevices.getUserMedia({video,audio:false});}
+    catch(error){
+      if(generation!==this.generation)return null;
+      if(!['NotReadableError','AbortError','OverconstrainedError'].includes(error.name))throw error;
+      // Allow a just-stopped capture session to release its driver, then try
+      // a modest format on the SAME device. Never silently pick another camera.
+      await new Promise(resolve=>setTimeout(resolve,300));
+      if(generation!==this.generation)return null;
+      const fallback={width:{ideal:640},height:{ideal:480},frameRate:{ideal:15,max:30}};
+      if(deviceId)fallback.deviceId={exact:deviceId};
+      stream=await navigator.mediaDevices.getUserMedia({video:fallback,audio:false});
+    }
     if(generation!==this.generation){stream.getTracks().forEach(track=>track.stop());return null;}
     this.stream=stream;
     this.video=document.createElement('video');this.video.muted=true;this.video.playsInline=true;
