@@ -8,7 +8,8 @@ export class BrowserCamera {
   async start(deviceId) {
     this.stop();const generation=this.generation;
     if(!navigator.mediaDevices?.getUserMedia)throw Error('This browser does not expose webcams. Open the studio in Firefox, Chrome or Edge on this PC.');
-    const video={width:{ideal:1280},height:{ideal:720},frameRate:{ideal:30,max:30}};
+    const video={width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30,max:30}};
+    if(navigator.mediaDevices.getSupportedConstraints?.().resizeMode)video.resizeMode={ideal:'none'};
     if(deviceId)video.deviceId={exact:deviceId};
     let stream;
     try {stream=await navigator.mediaDevices.getUserMedia({video,audio:false});}

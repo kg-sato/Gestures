@@ -1,119 +1,65 @@
-# Gestures / Donut Lab
+# Gestures — Jelly Camera
 
-One donut you can reshape, throw and catch with your hands. A Three.js surface experiment by
-**kg-sato**, with a camera-free mouse mode and local webcam hand tracking.
+A camera playground where your hands stretch, slice, squish and move translucent jelly. Each action turns the whole camera into a different comic-book panel.
 
-![A deformed donut in Gestures](docs/images/donut.png)
+![Jelly Camera introduction](docs/images/jelly-camera.jpg)
 
-## Run
+Built with vanilla JavaScript, Three.js and local MediaPipe hand tracking. Video stays on your PC; there is no cloud inference or microphone capture.
 
-With Python and Node.js installed, open PowerShell in this folder:
+## Run on Windows
+
+Install Python and Node.js, then open PowerShell in this repository:
 
 ```powershell
 powershell -NoProfile -File scripts/setup.ps1
-.\.venv\Scripts\python.exe server.py
 ```
 
-Open **http://127.0.0.1:8765/**. After setup, `Start Gestures.cmd` starts it again.
-Studio works immediately; Live camera asks for video access. No microphone or
-external inference service is used. Downloaded libraries and models stay local.
+Double-click **Start Gestures.cmd** and open **http://127.0.0.1:8765/**. The existing Gestures desktop shortcut also starts/reuses the server and opens your default browser. Setup downloads the required local libraries and hand model; subsequent runs serve them locally.
 
-## Controls
+Select your webcam and connect. Dismiss the introduction for a clear view—it appears once per page load. Camera selection, connection and fullscreen are the only persistent controls. No Studio, model editor or debug toolbar.
 
-| Input | What it does |
-| --- | --- |
-| One thumb/index pinch, move up/down | Thicken/thin the tube |
-| Select Ripple, then one pinch up/down | Add/remove waves in the ring |
-| Two pinches, spread/squeeze | Open/narrow the hole |
-| Two pinches, tilt | Twist the oval cross-section |
-| Mouse/touch drag in Sculpt | Horizontal changes hole radius; vertical sculpts the selected tool |
-| Drag in Orbit | Turn the view without changing geometry |
-| Scroll in Studio | Zoom |
-| Undo / Redo | Restore a whole drag, pinch session or slider edit |
+## Play with your hands
 
-Pinches work anywhere in the camera view; hitting a small object target is not
-required. Hand markers show the filtered positions and active pinch state. The
-controller stabilizes acquisition for 100 ms, debounces opening for 70 ms, and
-pauses the entire edit if one participating hand disappears. Recovery establishes
-new baselines. Loss after 260 ms ends the edit; a surviving pinch must open before
-rearming. Blur, camera changes and manual controls safely release active input.
-
-Shortcuts: **S** Sculpt, **V** Orbit, **R** Reset, **Ctrl+Z** Undo,
-**Ctrl+Shift+Z** Redo. The tutorial contains the full guide.
-
-## AR Catch
-
-Choose **AR Catch** to play with the same donut as a small throwable object. In
-Live camera, pinch near it to pick it up, flick your hand and open the pinch to
-throw. Keep the other hand pinched near its flight path to catch. The green
-receiving circle shows the catch window; the score tracks catches and streaks.
-**New round** returns the donut to the center and clears the score.
-
-Studio also supports mouse/touch drag-and-flick throws. Catch uses buffered recent
-hand motion from before the release gesture, a capped throw speed, fixed-step
-gravity and bounces, and swept-path checks so fast motion cannot simply skip the
-catch window. A short cooldown prevents immediate self-catches. Hand tracking
-loss, blur and disconnection never launch the object. Sculpt parameters are
-preserved while Catch mode moves the donut; switching back restores the sculpture.
-
-This is a camera-plane AR game, with no real-world depth or collision sensing.
-The approach is informed by official Meta, Three.js and A-Frame examples;
-[research and implementation notes](docs/research/AR-CATCH.md) link the sources.
-
-## Surface and topology
-
-Gestures change **vertex positions**, rather than translating or scaling a rigid
-ring. Hole radius, tube thickness, twist and ripple control a periodic torus surface.
-Normals are recomputed and averaged across the duplicated UV seams so the surface
-remains smooth. The renderer reuses its position buffer while sculpting.
-
-**Show topology** draws the mesh; **Detail** changes its tessellation:
-
-| Detail | Ring × tube segments | Triangles |
+| Gesture | Jelly response | Camera treatment |
 | --- | --- | --- |
-| Light | 72 × 28 | 4,032 |
-| Balanced | 112 × 40 | 8,960 |
-| Dense | 160 × 56 | 17,920 |
+| Raise only your index finger over a piece, hold briefly, then move | Drag that piece; it pushes and softly rebounds against others | Persistent comic base |
+| Pinch thumb/index inside a piece and pull; use two pinches for a wider stretch | Stretch the selected piece | Electric speed/color lines |
+| Open index/middle fingers like scissors, then close over the jelly | Split a piece in two; reopen before another cut | Black-and-white manga cuts |
+| Bring open palms together around a piece, or press one palm toward a screen edge | Compress the jelly | Underwater cartoon waves and bubbles |
+| Close your hand around a smaller sliced piece and hold briefly | Morph that piece into a ball | Warm pink/yellow halftone pop |
 
-The donut keeps one open hole. Sculpting changes its surface; changing mesh detail
-changes vertex/triangle connectivity and density. Bounds keep the hole open and
-prevent a collapsed surface. Materials include chrome, clay, glass and hologram.
+Up to **eight pieces**. The jelly is semi-transparent so you can see yourself behind it. Changing drag pose or losing tracking releases safely without a throw. Disconnect preserves pieces; reload starts fresh. Keep hands well lit and separated, and make deliberate gestures.
 
-Save/open editable Donut Lab JSON scenes, export the actual deformed geometry as
-GLB, or capture a PNG. A camera-mode PNG includes the local camera image. Editing
-is session-only until you explicitly save a file. Old multi-object scene files
-are rejected without replacing your donut.
+## Preserving camera quality
 
-## Portfolio build
+- Request **1080p / 30fps** as preferences, with native sizing where supported. The browser may choose another supported mode; compatibility recovery can fall back to VGA.
+- Keep the display canvas at the **actual negotiated capture dimensions**. Only the separate hand-tracking copy is resized to 640px width.
+- Preserve **85% of original camera color/detail** in the default comic blend, with no baseline saturation boost. Ink and print texture remain; action filters intentionally make stronger temporary changes.
+- Acquire frames on video-frame callbacks where available and avoid repainting unchanged camera frames in static modes.
 
-```powershell
-npm.cmd run build
-```
+These choices follow [browser capture guidance](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia) and [video-frame scheduling documentation](https://developer.mozilla.org/en-US/docs/Web/API/HTMLVideoElement/requestVideoFrameCallback). See [research and implementation details](docs/research/CAMERA-QUALITY.md). Actual webcam fidelity and responsiveness depend on the device/browser and still need a live Brio check.
 
-`dist/` is a self-contained static site and supports subpaths such as `/Gestures/`.
-Upload that directory to a static host. Live camera requires HTTPS or localhost.
-The static site does not need Python or USB APIs. No deployment is automatic.
+If the camera is busy, close other tabs/apps using it and reconnect. Grant video permission in your browser. The app retries once on the same device; it never silently changes cameras. Reduced-motion preferences remove moving waves/streaks and retain gentler static filtering.
 
-## Verification
+## Verify and build
 
 ```powershell
-npm.cmd test
-.\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py"
-# With the app already running in another terminal:
-$env:GESTURES_TEST_URL='http://127.0.0.1:8765/'
-npm.cmd run test:donut-browser
-npm.cmd run test:catch-browser
+npm test
+powershell -NoProfile -File scripts/test-frontend-skills.ps1
+npm run build
 ```
 
-The unit suite covers mesh winding, closed seams, noncollapsed holes, deformation,
-tessellation, pinch stability, hand identity, jitter, variable frame delivery,
-loss/recovery and undo documents. Browser checks exercise real WebGL, pointer
-capture/blur, mouse-versus-orbit ownership, injected landmark streams, generated
-webcam/MediaPipe, export/import, mobile controls and local runtime requests.
-Generated input cannot establish physical webcam accuracy or lighting tolerance.
+The frontend runner starts its own private loopback server, uses generated video and synthetic hand landmarks, and saves reports/screenshots under ignored `build/frontend-skills/`. It does not open your physical webcam. `npm run test:browser` / `npm run test:jelly-browser` run the same active browser suite against `GESTURES_TEST_URL` (default `http://127.0.0.1:8777/`).
 
-Earlier drawing, particle and multi-object studio sources are retained in
-`design/`. Their saved drawing data and hardware backups remain untouched. The
-active page has one donut; assembly tools and other shapes are not in its UI.
-[Third-party notices](THIRD_PARTY_NOTICES.md) retain library licences. Historical
-implementation evidence is recorded in [docs/STATUS.md](docs/STATUS.md).
+`npm run build` produces a self-contained `dist/` with local assets for root or subpath hosting. It does not publish anything. Browser camera access requires an appropriate secure context such as localhost or HTTPS.
+
+## Project structure
+
+- `web/jelly-model.js`: hand classification, piece targeting, drag/collision rules and effects.
+- `web/jelly-scene.js`: translucent procedural meshes, ball morph and damped deformation.
+- `web/app.js`: webcam/worker lifecycle, camera compositing and comic layers.
+- `web/webcam-source.js`: capture preferences, cancellation and recovery.
+- `server.py`: local assets and optional historical hardware bridge. Serial/device access stays disabled by default.
+- `.agents/skills/`: project-specific UI and motion workflows adapted from reviewed local skills.
+
+This is bounded rounded-cube splitting and approximate screen-plane contact, not arbitrary volumetric cutting, room mapping or 3D soft-body simulation. Historical Donut/Catch snapshots live in `design/donut-lab/`; drawing storage and private hardware backups remain untouched. Private configuration, downloaded models, generated builds and recordings are ignored by Git. Third-party notices are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

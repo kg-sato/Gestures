@@ -5,7 +5,7 @@ $url = 'http://127.0.0.1:8765/'
 function Test-Studio {
     try {
         $page = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 2
-        return $page.StatusCode -eq 200 -and $page.Content.Contains('Donut Lab')
+        return $page.StatusCode -eq 200 -and $page.Content.Contains('Gestures')
     } catch { return $false }
 }
 try {

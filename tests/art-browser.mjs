@@ -1,2 +1,1 @@
-// Compatibility entry point for the current sculpting UI.
-import './donut-browser.mjs';
+import './jelly-browser.mjs';

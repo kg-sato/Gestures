@@ -16,7 +16,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 ROOT = Path(__file__).resolve().parent
 MAX_REQUEST = 4096
 STATIC = {"/": ROOT / "web/index.html"}
-for name in ("index.html", "style.css", "app.js", "tracker-worker.js", "gesture-engine.js", "webcam-source.js", "ar-controls.js", "ar-scene.js", "workbench-model.js", "workbench-hands.js", "art-meshes.js", "art-presets.js", "studio-editor.js", "scene-document.js", "favicon.svg", "donut-shape.js", "donut-scene.js", "donut-gestures.js", "donut-document.js", "ar-catch.js"):
+for name in ("index.html", "style.css", "app.js", "tracker-worker.js", "gesture-engine.js", "webcam-source.js", "ar-controls.js", "ar-scene.js", "workbench-model.js", "workbench-hands.js", "art-meshes.js", "art-presets.js", "studio-editor.js", "scene-document.js", "favicon.svg", "donut-shape.js", "donut-scene.js", "donut-gestures.js", "donut-document.js", "ar-catch.js", "jelly-model.js", "jelly-scene.js"):
     STATIC["/" + name] = ROOT / "web" / name
 STATIC["/models/hand_landmarker.task"] = ROOT / "models/hand_landmarker.task"
 STATIC["/node_modules/cannon-es/dist/cannon-es.js"] = ROOT / "node_modules/cannon-es/dist/cannon-es.js"

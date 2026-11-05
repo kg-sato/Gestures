@@ -4,8 +4,8 @@ import {BrowserCamera} from '../web/webcam-source.js';
 
 test('camera retries a busy driver once with a modest format on the same device',async()=>{
  const calls=[],original=Object.getOwnPropertyDescriptor(globalThis,'navigator');
- Object.defineProperty(globalThis,'navigator',{configurable:true,value:{mediaDevices:{getUserMedia:async c=>{calls.push(c);throw Object.assign(new Error('busy'),{name:'NotReadableError'});}}}});
- try{const camera=new BrowserCamera({});await assert.rejects(camera.start('brio'),{name:'NotReadableError'});assert.equal(calls.length,2);assert.equal(calls[1].video.width.ideal,640);assert.deepEqual(calls[1].video.deviceId,{exact:'brio'});assert.equal(calls[1].audio,false);assert.equal(camera.stream,null);}
+ Object.defineProperty(globalThis,'navigator',{configurable:true,value:{mediaDevices:{getSupportedConstraints:()=>({resizeMode:true}),getUserMedia:async c=>{calls.push(c);throw Object.assign(new Error('busy'),{name:'NotReadableError'});}}}});
+ try{const camera=new BrowserCamera({});await assert.rejects(camera.start('brio'),{name:'NotReadableError'});assert.equal(calls.length,2);assert.equal(calls[0].video.width.ideal,1920);assert.equal(calls[0].video.height.ideal,1080);assert.equal(calls[0].video.frameRate.ideal,30);assert.deepEqual(calls[0].video.resizeMode,{ideal:'none'});assert.equal(calls[1].video.width.ideal,640);assert.deepEqual(calls[1].video.deviceId,{exact:'brio'});assert.equal(calls[1].audio,false);assert.equal(camera.stream,null);}
  finally{if(original)Object.defineProperty(globalThis,'navigator',original);else delete globalThis.navigator;}
 });
 

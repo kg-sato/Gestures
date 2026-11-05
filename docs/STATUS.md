@@ -217,3 +217,44 @@ Live camera / AR Catch. Current donut settings were saved under ignored
 build/donut-before-ar-catch.json and restored through the controls before refreshing.
 
 Static build is prepared in dist/. All current changes remain local and uncommitted.
+
+
+## Cartoon studio — 2026-11-05
+
+Implemented the user-approved cartoon direction from docs/design/playful-motion.md: paper/ink controls, coral Comic finish with shared-geometry contour, mode puck, dialog/inspector entrances and catch burst/score feedback. Four adapted Claude project skills are under .agents/skills; no marketplace packages or external tools were installed.
+
+Validation: 100 unit tests, 16 Donut browser checks, 9 AR Catch checks and build passed. tests/cartoon-browser.mjs verifies Comic/material switching, shared contour geometry, dialog interruption, sampled burst timing, repeated catches and reduced motion. Screenshots/results: ignored build/cartoon/. Frontend workflow: build/frontend-skills/20261105-170444-b86d82/; behavior passed. Cream/ink-shadow/color findings are intentional approved art direction. Axe initial-state audit: zero violations, one incomplete contrast check; not full accessibility certification. Physical webcam quality remains unverified. Comic GLB uses matte color/actual geometry; browser contour/toon lighting is not exported. Changes remain uncommitted.
+
+
+## Jelly camera replacement — 2026-11-05
+
+User explicitly superseded Donut/Studio/Catch with gesture-only jelly and whole-camera comic reactions, including underwater Splat. Active app uses jelly-model.js/jelly-scene.js; prior active UI and browser sources preserved in design/donut-lab/. No manual model controls, FPS or bottom UI. Introduction is once per page load. Shape triggers have 350ms stability and 1800ms cooldown, no repeated trigger while latched. Camera failure handling/back-pressure remain local.
+
+Verification: 106 unit tests and build passed; eight jelly generated-camera browser checks passed. Frontend report build/frontend-skills/20261105-171417-81ab21/ contains underwater and mobile screenshots, local MediaPipe initialization and no external requests/errors. Cartoon cream/offset-shadow inspector findings are intentional. Physical webcam quality remains unverified; no serial hardware touched. Changes uncommitted.
+
+
+
+## Tactile pieces and transparency — 2026-11-05
+
+Implemented alpha-transparent jelly over the camera; pinch stretches targeted pieces, stable index/middle scissors split them, approaching palms/one palm at an edge compress, and a stable fist on a sliced piece morphs it to a sphere. Each action triggers its own camera filter. Pieces retain identities and volume-like basis dimensions; eight-piece cap. Underlying mesh cutting is bounded rounded-cuboid splitting, not arbitrary freeform mesh booleans. Camera cover crop and mirrored hand coordinates are aligned.
+
+Landmark tests cover gesture distinctions, targeted stretching, deliberate/rearmed scissors, two palms, edge press, small-piece-only ball, tracking loss and cap. Browser checks feed raw scissors/fist landmarks into the active model and verify separate rendered pieces, ball state and matching full-camera filters; generated video remains visible behind jelly. Physical webcam feel remains unverified. Changes local and uncommitted.
+
+
+## Comic base and piece interaction — 2026-11-05
+
+Added index-only stable hand drag with preserved offset and no release throw. Cut pieces push/rebound with bounded damped, mass-weighted screen-plane collisions; render jitter/loss/reordering cases tested. Camera always receives ink contour + posterization before action-specific filters. Stronger underwater/manga/speed/pop palettes, cached print dots and a drag contact ring.
+
+Evidence: 112 unit tests, build and 15 generated-camera browser checks passed. Frontend runner output: build/frontend-skills/20261105-173738-e2be53/. Raw index landmarks moved a selected cut piece; all four filter chains include the comic base and are distinct. Reviewed baseline/underwater/manga/pop screenshots. Inspector cream/shadow leads retain intentional cartoon direction; real webcam feel and latency remain unverified. Changes uncommitted.
+
+
+## Camera color correction — 2026-11-05
+
+Removed both always-on saturation boosts (SVG 1.8 and CSS 1.25) and baseline contrast boost. Comic base now blends 70% source with 30% ink/poster treatment. Action-specific filters remain stronger. Added a browser-rendered skin-tone color-patch assertion (each RGB channel within 18 of source, opaque alpha). 112 unit tests, 16 browser checks and build passed. Physical camera skin-tone appearance still requires user confirmation. Changes uncommitted.
+
+
+## Camera quality research and integration — 2026-11-05
+
+Research: docs/research/CAMERA-QUALITY.md. Capture now requests 1080p/30 as ideals and native sizing when supported, retaining same-device fallback. Display preserves negotiated dimensions; inference stays independently downscaled. Static modes avoid duplicate bitmap paints, and the comic base preserves 85% source/15% treatment with less blur and explicit sRGB. README rewritten for current jelly gestures, camera handling, quality, build and verification; screenshot is camera-off generated evidence.
+
+Final verification for integration: 112 JS unit tests, 17 Python tests, 17 generated-camera browser checks, and static build passed. Latest frontend report: build/frontend-skills/20261105-175154-c65714/. Camera dimensions and rendered skin-tone regression assertions passed. Cartoon cream/offset-shadow findings are intentional; physical Brio quality/latency is unverified. Remote main matched local before integration; no other branch required merging. User explicitly authorized committing and pushing all accumulated work.
