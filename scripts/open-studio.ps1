@@ -5,13 +5,30 @@ $url = 'http://127.0.0.1:8765/'
 function Test-Studio {
     try {
         $page = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 2
-        return $page.StatusCode -eq 200 -and $page.Content.Contains('Gestures')
+        if ($page.StatusCode -ne 200 -or -not $page.Content.Contains('Gestures')) { return $false }
+        # An older server can serve the updated HTML but lack its new module routes.
+        foreach ($module in @('effect-input.js','camera-effects.js')) {
+            $script = Invoke-WebRequest -Uri ($url + $module) -UseBasicParsing -TimeoutSec 2
+            if ($script.StatusCode -ne 200 -or -not $script.Content.Contains('export class ')) { return $false }
+        }
+        return $true
     } catch { return $false }
 }
 try {
     if (-not (Test-Studio)) {
         $python = Join-Path $project '.venv\Scripts\python.exe'
         if (-not (Test-Path -LiteralPath $python)) { throw 'Run scripts\setup.ps1 in the Gestures folder first.' }
+        $serverPath = Join-Path $project 'server.py'
+        $listeners = @(Get-NetTCPConnection -LocalPort 8765 -State Listen -ErrorAction SilentlyContinue | Where-Object { $_.LocalAddress -eq '127.0.0.1' })
+        foreach ($listener in $listeners) {
+            $candidate = Get-CimInstance Win32_Process -Filter ("ProcessId=" + $listener.OwningProcess) -ErrorAction Stop
+            # Never stop another project's server, including wildcard listeners on the same port.
+            if ($candidate.Name -in @('python.exe','pythonw.exe') -and
+                $candidate.CommandLine.Contains('"' + $serverPath + '"') -and
+                $candidate.CommandLine -match '--port\s+8765(?:\s|$)') {
+                Stop-Process -Id $candidate.ProcessId -ErrorAction Stop
+            }
+        }
         $logs = Join-Path $project 'build\launcher'
         New-Item -ItemType Directory -Force $logs | Out-Null
         $stamp = Get-Date -Format 'yyyyMMdd-HHmmss-fff'

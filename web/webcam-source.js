@@ -29,7 +29,11 @@ export class BrowserCamera {
     this.video=document.createElement('video');this.video.muted=true;this.video.playsInline=true;
     this.video.srcObject=stream;
     try {await this.video.play();}
-    catch(error){this.stop();throw error;}
+    catch(error){
+      // An older play() may reject after a newer connection already started.
+      if(generation!==this.generation)return null;
+      this.stop();throw error;
+    }
     if(generation!==this.generation)return null;
     const track=stream.getVideoTracks()[0];
     track.addEventListener('ended',()=>{if(generation===this.generation){this.stop();this.onEnded?.();}});
@@ -43,9 +47,10 @@ export class BrowserCamera {
     const capture=async()=>{
       if(generation!==this.generation)return;
       try {
+        const capturedAt=performance.now();
         const bitmap=await createImageBitmap(video);
         if(generation!==this.generation){bitmap.close();return;}
-        await this.onFrame(bitmap,performance.now());
+        await this.onFrame(bitmap,capturedAt,{bitmapMs:performance.now()-capturedAt});
       }catch(error){if(generation===this.generation)this.onError?.(error);}
       if(generation===this.generation)this.schedule(generation);
     };

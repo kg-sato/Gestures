@@ -1,65 +1,58 @@
-# Gestures — Jelly Camera
+# Gestures — Camera Experiments
 
-A camera playground where your hands stretch, slice, squish and move translucent jelly. Each action turns the whole camera into a different comic-book panel.
-
-![Jelly Camera introduction](docs/images/jelly-camera.jpg)
-
-Built with vanilla JavaScript, Three.js and local MediaPipe hand tracking. Video stays on your PC; there is no cloud inference or microphone capture.
+Six selectable live-camera effects, shaped by your hands. Built with vanilla JavaScript, Three.js and local MediaPipe. Video stays on your computer; there is no cloud inference or microphone capture.
 
 ## Run on Windows
 
-Install Python and Node.js, then open PowerShell in this repository:
+Existing installations: double-click **Start Gestures.cmd** and open **http://127.0.0.1:8765/**. The desktop shortcut starts or reuses the local server and opens your default browser. If you already had a server running before this update, close that server and relaunch so it picks up the new module routes.
 
-```powershell
-powershell -NoProfile -File scripts/setup.ps1
-```
+For a fresh setup, install Python and Node.js, then run `powershell -NoProfile -File scripts/setup.ps1` from this repository. Setup downloads the libraries and hand model; subsequent runs serve them locally.
 
-Double-click **Start Gestures.cmd** and open **http://127.0.0.1:8765/**. The existing Gestures desktop shortcut also starts/reuses the server and opens your default browser. Setup downloads the required local libraries and hand model; subsequent runs serve them locally.
+Choose your camera and connect. The introduction appears once per page load. The effect selector, camera controls and fullscreen remain available; there is no model editor or debug toolbar.
 
-Select your webcam and connect. Dismiss the introduction for a clear view—it appears once per page load. Camera selection, connection and fullscreen are the only persistent controls. No Studio, model editor or debug toolbar.
+## Six treatments
 
-## Play with your hands
-
-| Gesture | Jelly response | Camera treatment |
+| Treatment | What you see | What to try |
 | --- | --- | --- |
-| Raise only your index finger over a piece, hold briefly, then move | Drag that piece; it pushes and softly rebounds against others | Persistent comic base |
-| Pinch thumb/index inside a piece and pull; use two pinches for a wider stretch | Stretch the selected piece | Electric speed/color lines |
-| Open index/middle fingers like scissors, then close over the jelly | Split a piece in two; reopen before another cut | Black-and-white manga cuts |
-| Bring open palms together around a piece, or press one palm toward a screen edge | Compress the jelly | Underwater cartoon waves and bubbles |
-| Close your hand around a smaller sliced piece and hold briefly | Morph that piece into a ball | Warm pink/yellow halftone pop |
+| Cover Window | Original album-style camera art inside a fine frame | Frame with two hands; pinch and release to change the cover |
+| Risograph | Three misregistered print inks and paper grain | Spread your hands to separate the inks; pinch and release for another palette |
+| CRT | Scanlines, a curved screen and restrained RGB separation | Move your hands through the signal, then let it settle |
+| One-bit Print | Black-and-white dither with a paper border | Spread your hands to change dot scale; pinch and release to reverse ink and paper |
+| Liquid Motion | Bounded hand-driven image displacement | Stir the image with your hands, then stop to let it clear |
+| Particle Morph | Original colored point-cloud forms inside a fine cage | Hold a pinch to scatter; release to gather the next form |
 
-Up to **eight pieces**. The jelly is semi-transparent so you can see yourself behind it. Changing drag pose or losing tracking releases safely without a throw. Disconnect preserves pieces; reload starts fresh. Keep hands well lit and separated, and make deliberate gestures.
+Keep hands well lit and visible. A pinch needs a brief deliberate hold and release. Tracking loss, disconnecting or changing effects cancels an unfinished gesture without advancing the palette or particle form. Reduced-motion preferences suppress warps/scatter travel while retaining the selected treatment and useful state changes.
 
-## Preserving camera quality
+These are original browser interpretations informed by the supplied wxll.hx references. They do not include paid project files, copied album art, exact proprietary post-processing or a verified ranking by views. See the [video study](docs/design/wxll-hx-video-study.md) and [approved design](docs/design/six-camera-effects-proposal.md).
 
-- Request **1080p / 30fps** as preferences, with native sizing where supported. The browser may choose another supported mode; compatibility recovery can fall back to VGA.
-- Keep the display canvas at the **actual negotiated capture dimensions**. Only the separate hand-tracking copy is resized to 640px width.
-- Preserve **85% of original camera color/detail** in the default comic blend, with no baseline saturation boost. Ink and print texture remain; action filters intentionally make stronger temporary changes.
-- Acquire frames on video-frame callbacks where available and avoid repainting unchanged camera frames in static modes.
+## Camera and performance
 
-These choices follow [browser capture guidance](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia) and [video-frame scheduling documentation](https://developer.mozilla.org/en-US/docs/Web/API/HTMLVideoElement/requestVideoFrameCallback). See [research and implementation details](docs/research/CAMERA-QUALITY.md). Actual webcam fidelity and responsiveness depend on the device/browser and still need a live Brio check.
+Capture requests 1080p at up to 30 fps, with a same-device compatibility fallback. The GPU samples the negotiated camera image; a separate 640-pixel-wide copy feeds local hand tracking. Only one inference is pending at a time. Modes switch without restarting the stream. Camera exposure, actual capture rate, GPU/CPU delegate and browser affect results.
 
-If the camera is busy, close other tabs/apps using it and reconnect. Grant video permission in your browser. The app retries once on the same device; it never silently changes cameras. Reduced-motion preferences remove moving waves/streaks and retain gentler static filtering.
+Private inspection metrics record software capture-copy, inference, result age and frame intervals. They are not exposure-to-display latency measurements. Generated-camera tests cannot establish physical webcam feel or parity with the reference clips. Serial/device hardware remains disabled by default; see [CAMERA.md](docs/CAMERA.md) before hardware work.
+
+If the camera is busy, close other camera tabs/apps and reconnect. Grant camera permission in your browser. The app retries a smaller format once on the same device and never silently changes cameras.
 
 ## Verify and build
 
 ```powershell
 npm test
+python -m unittest discover -s tests -p test_server.py
 powershell -NoProfile -File scripts/test-frontend-skills.ps1
 npm run build
 ```
 
-The frontend runner starts its own private loopback server, uses generated video and synthetic hand landmarks, and saves reports/screenshots under ignored `build/frontend-skills/`. It does not open your physical webcam. `npm run test:browser` / `npm run test:jelly-browser` run the same active browser suite against `GESTURES_TEST_URL` (default `http://127.0.0.1:8777/`).
+The frontend runner starts its own private loopback server, uses generated video and synthetic landmarks, and saves browser screenshots, pixel comparisons and software timing reports under ignored `build/frontend-skills/`. It never opens your physical webcam. `npm run test:browser` and `npm run test:effects-browser` run the active suite against `GESTURES_TEST_URL` (default `http://127.0.0.1:8777/`).
 
-`npm run build` produces a self-contained `dist/` with local assets for root or subpath hosting. It does not publish anything. Browser camera access requires an appropriate secure context such as localhost or HTTPS.
+`npm run build` creates a self-contained `dist/` for root or subpath hosting; it does not publish. Camera access requires a secure context such as localhost or HTTPS. Historical jelly browser tests remain available via `test:jelly-browser` for the old experience and are not the active regression suite.
 
 ## Project structure
 
-- `web/jelly-model.js`: hand classification, piece targeting, drag/collision rules and effects.
-- `web/jelly-scene.js`: translucent procedural meshes, ball morph and damped deformation.
-- `web/app.js`: webcam/worker lifecycle, camera compositing and comic layers.
+- `web/effect-input.js`: stable hand matching, confirmed pinch edges, bounded controls and cancellation.
+- `web/camera-effects.js`: GPU camera filters, original textures/cover typography and procedural particle morphing.
+- `web/app.js`: selector, camera/worker lifecycle, normalized coordinate mapping and private inspection metrics.
 - `web/webcam-source.js`: capture preferences, cancellation and recovery.
-- `server.py`: local assets and optional historical hardware bridge. Serial/device access stays disabled by default.
-- `.agents/skills/`: project-specific UI and motion workflows adapted from reviewed local skills.
+- `web/tracker-worker.js`: local two-hand inference with GPU attempt and CPU fallback.
+- `server.py`: local asset routes and optional historical hardware bridge.
 
-This is bounded rounded-cube splitting and approximate screen-plane contact, not arbitrary volumetric cutting, room mapping or 3D soft-body simulation. Historical Donut/Catch snapshots live in `design/donut-lab/`; drawing storage and private hardware backups remain untouched. Private configuration, downloaded models, generated builds and recordings are ignored by Git. Third-party notices are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Jelly/Donut/Catch source and unit tests remain as historical reference; drawing storage and private hardware backups are untouched. Private configuration, downloaded models, reference videos, research environments and generated builds remain ignored. Third-party notices are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

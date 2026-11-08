@@ -22,3 +22,57 @@ test('permission failures are not retried',async()=>{
  try{await assert.rejects(new BrowserCamera({}).start('brio'),{name:'NotAllowedError'});assert.equal(calls,1);}
  finally{if(original)Object.defineProperty(globalThis,'navigator',original);else delete globalThis.navigator;}
 });
+
+const deferred=()=>{let resolve,reject;const promise=new Promise((yes,no)=>{resolve=yes;reject=no;});return{promise,resolve,reject};};
+function mockCapture(getUserMedia){
+ const navigatorDescriptor=Object.getOwnPropertyDescriptor(globalThis,'navigator'),documentDescriptor=Object.getOwnPropertyDescriptor(globalThis,'document'),videos=[];
+ Object.defineProperty(globalThis,'navigator',{configurable:true,value:{mediaDevices:{getUserMedia}}});
+ Object.defineProperty(globalThis,'document',{configurable:true,value:{createElement:()=>{
+  const playing=deferred(),video={playing,videoWidth:1280,videoHeight:720,srcObject:null,play:()=>playing.promise,pause(){},requestVideoFrameCallback:()=>1,cancelVideoFrameCallback(){}};
+  videos.push(video);return video;
+ }}});
+ return{videos,restore(){
+  if(navigatorDescriptor)Object.defineProperty(globalThis,'navigator',navigatorDescriptor);else delete globalThis.navigator;
+  if(documentDescriptor)Object.defineProperty(globalThis,'document',documentDescriptor);else delete globalThis.document;
+ }};
+}
+function fakeStream(label){
+ const track={label,stopped:false,stop(){this.stopped=true;},addEventListener(){},getSettings:()=>({width:1280,height:720})};
+ return{track,getTracks:()=>[track],getVideoTracks:()=>[track]};
+}
+
+test('a cancelled play rejection cannot stop a newer connected camera',async()=>{
+ const streams=[fakeStream('first'),fakeStream('second')];let index=0;
+ const mock=mockCapture(async()=>streams[index++]),camera=new BrowserCamera({});
+ try{
+  const first=camera.start('first');await Promise.resolve();
+  camera.stop();const second=camera.start('second');await Promise.resolve();
+  mock.videos[1].playing.resolve();await second;
+  mock.videos[0].playing.reject(Object.assign(new Error('old playback aborted'),{name:'AbortError'}));
+  assert.equal(await first,null);
+  assert.equal(camera.stream,streams[1]);assert.equal(camera.video,mock.videos[1]);
+  assert.equal(streams[0].track.stopped,true);assert.equal(streams[1].track.stopped,false);
+ }finally{camera.stop();mock.restore();}
+});
+
+test('a stale permission result releases only its own tracks',async()=>{
+ const oldPermission=deferred(),streams=[fakeStream('first'),fakeStream('second')];let index=0;
+ const mock=mockCapture(()=>index++===0?oldPermission.promise:Promise.resolve(streams[1])),camera=new BrowserCamera({});
+ try{
+  const first=camera.start('first');
+  camera.stop();const second=camera.start('second');await Promise.resolve();
+  mock.videos[0].playing.resolve();await second;
+  oldPermission.resolve(streams[0]);assert.equal(await first,null);
+  assert.equal(camera.stream,streams[1]);assert.equal(streams[0].track.stopped,true);assert.equal(streams[1].track.stopped,false);
+ }finally{camera.stop();mock.restore();}
+});
+
+test('a current playback failure still closes its own stream and rejects',async()=>{
+ const stream=fakeStream('current'),mock=mockCapture(async()=>stream),camera=new BrowserCamera({});
+ try{
+  const pending=camera.start('current');await Promise.resolve();
+  mock.videos[0].playing.reject(Object.assign(new Error('playback failed'),{name:'AbortError'}));
+  await assert.rejects(pending,{name:'AbortError'});
+  assert.equal(camera.stream,null);assert.equal(stream.track.stopped,true);
+ }finally{camera.stop();mock.restore();}
+});

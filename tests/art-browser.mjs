@@ -1,1 +1,1 @@
-import './jelly-browser.mjs';
+import './effects-browser.mjs';

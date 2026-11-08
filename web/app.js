@@ -1,27 +1,109 @@
 import {BrowserCamera} from './webcam-source.js';
-import {JellyModel} from './jelly-model.js';
-import {JellyScene} from './jelly-scene.js';
-const $=id=>document.getElementById(id),scene=new JellyScene($('fx')),reduced=matchMedia('(prefers-reduced-motion: reduce)'),cameraCanvas=$('camera'),ctx=cameraCanvas.getContext('2d'),comic=$('comic'),ink=comic.getContext('2d');
-let effect=null,effectUntil=0,connected=false,connecting=false,worker=null,ready=false,pending=null,generation=0,frameId=0,latest=null,paintedBitmap=null,paintedMode='',aspect=16/9,last=performance.now(),introDismissed=false,noticeTimer;
-const printPatterns=new Map();function printPattern(key='base'){if(!printPatterns.has(key)){const tile=document.createElement('canvas');tile.width=tile.height=key==='ball'?32:22;const pen=tile.getContext('2d');pen.fillStyle=key==='ball'?'#e1298c66':'#30253f16';pen.beginPath();pen.arc(8,8,key==='ball'?3:1.3,0,Math.PI*2);pen.fill();printPatterns.set(key,ink.createPattern(tile,'repeat'));}return printPatterns.get(key);}const metrics={frames:0,inferences:0};const dragMarker=document.createElement('div');dragMarker.id='drag-marker';dragMarker.setAttribute('aria-hidden','true');document.body.append(dragMarker);
-const model=new JellyModel({onEffect:(kind,time)=>{if(!connected)return;effect=kind;effectUntil=time+3800;document.body.dataset.effect=kind;$('reaction').textContent=({splat:'SQUISH!',ribbon:'STRETCH!',slice:'SNIP!',ball:'POP!',twist:'TWIST!'})[kind]||'';}});
-function message(text){$('notice').textContent=text;clearTimeout(noticeTimer);if(text)noticeTimer=setTimeout(()=>$('notice').textContent='',7000);}
-function clearEffect(){effect=null;delete document.body.dataset.effect;$('reaction').textContent='';}
-function reset(){generation++;model.reset(performance.now());clearEffect();}
-function initializeTracker(){if(worker)return;worker=new Worker(new URL('./tracker-worker.js',import.meta.url),{type:'module'});worker.onmessage=({data})=>{if(data.type==='ready'){ready=true;return;}if(data.type==='error'){ready=false;message('Hand tracking could not start. Reload to retry.');return;}if(data.id&&pending&&data.id.frame===pending.frame)pending=null;if(data.type!=='result'||!data.id||data.id.generation!==generation||!connected||document.hidden)return;if(performance.now()-data.timestamp>500){model.reset(performance.now());return;}metrics.inferences++;const screenAspect=innerWidth/innerHeight,cropX=(1-Math.min(1,screenAspect/aspect))/2,cropY=(1-Math.min(1,aspect/screenAspect))/2;const hands=data.hands.map(hand=>({...hand,landmarks:hand.landmarks.map(p=>({...p,x:((1-p.x)-cropX)/(1-2*cropX),y:(p.y-cropY)/(1-2*cropY)}))}));model.update(hands,performance.now());};worker.onerror=()=>{ready=false;pending=null;message('Hand tracking stopped. Reload to retry.');};worker.postMessage({type:'init'});}
-const camera=new BrowserCamera({onFrame:async(bitmap,timestamp)=>{if(!connected){bitmap.close();return;}latest?.close();latest=bitmap;if(!ready||pending||document.hidden)return;const gen=generation,copy=await createImageBitmap(bitmap,{resizeWidth:640,resizeHeight:Math.round(640/aspect)});if(!connected||generation!==gen||pending){copy.close();return;}pending={frame:++frameId,generation:gen};worker.postMessage({type:'frame',bitmap:copy,timestamp,id:pending},[copy]);},onEnded:()=>{disconnect();message('Camera disconnected. Reconnect it to continue.');},onError:()=>{reset();message('Camera frames interrupted. Disconnect and reconnect the camera.');}});
-function disconnect(){camera.stop();connected=false;connecting=false;reset();latest?.close();latest=null;paintedBitmap=null;paintedMode='';ctx.clearRect(0,0,cameraCanvas.width,cameraCanvas.height);$('connect').textContent='Connect camera';}
-async function connect(){if(connected||connecting){disconnect();return;}connecting=true;$('connect').textContent='Cancel';message('');initializeTracker();try{const info=await camera.start($('device').value);if(!info)return;connected=true;connecting=false;aspect=info.width/info.height;cameraCanvas.width=info.width;cameraCanvas.height=info.height;model.aspect=innerWidth/innerHeight;$('connect').textContent='Disconnect';await devices();}catch(error){disconnect();message(error.name==='NotAllowedError'?'Allow camera access in your browser to play.':['NotReadableError','AbortError'].includes(error.name)?'Camera busy. Close other tabs or apps using it, then reconnect.':error.message);}}
-async function devices(){try{const selected=$('device').value,list=(await navigator.mediaDevices?.enumerateDevices()||[]).filter(d=>d.kind==='videoinput');$('device').replaceChildren(new Option('Default camera',''));for(const [i,d]of list.entries())$('device').add(new Option(d.label||'Camera '+(i+1),d.deviceId));const preferred=list.find(d=>d.deviceId===selected)||list.find(d=>/Brio|Logitech/i.test(d.label));if(preferred)$('device').value=preferred.deviceId;}catch{message('Camera list unavailable.');}}
-$('connect').onclick=connect;$('device').onchange=()=>{if(connected||connecting)disconnect();};navigator.mediaDevices?.addEventListener('devicechange',()=>{if(!connected&&!connecting)devices();});
-function dismiss(){if(introDismissed)return;introDismissed=true;$('intro').hidden=true;}$('dismiss').onclick=dismiss;$('begin').onclick=()=>{dismiss();if(!connected&&!connecting)connect();};document.addEventListener('keydown',event=>{if(event.key==='Escape')dismiss();});$('fullscreen').onclick=()=>{const action=document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen();action.catch(()=>message('Fullscreen is unavailable in this browser.'));};
-function resize(){scene.resize();model.reset(performance.now());model.aspect=innerWidth/innerHeight;comic.width=innerWidth* Math.min(devicePixelRatio,1.5);comic.height=innerHeight*Math.min(devicePixelRatio,1.5);}window.addEventListener('resize',resize);
-function paintCamera(time){if(!latest)return;const mode=(effect||'base')+':'+reduced.matches,animated=!reduced.matches&&(effect==='splat'||effect==='twist');if(latest===paintedBitmap&&paintedMode===mode&&!animated)return;paintedBitmap=latest;paintedMode=mode;const w=cameraCanvas.width,h=cameraCanvas.height;ctx.save();ctx.translate(w,0);ctx.scale(-1,1);ctx.clearRect(0,0,w,h);if(effect==='splat'&&!reduced.matches){for(let y=0;y<h;y+=8){const offset=Math.sin(y*.027+time*.003)*w*.012;ctx.drawImage(latest,0,y,w,Math.min(8,h-y),offset,y,w,Math.min(8,h-y));}}else if(effect==='twist'&&!reduced.matches){ctx.translate(w/2,h/2);ctx.rotate(Math.sin(time*.002)*.035);ctx.scale(1.08,1.08);ctx.drawImage(latest,-w/2,-h/2,w,h);}else ctx.drawImage(latest,0,0,w,h);ctx.restore();}
-function drawComic(time){const w=comic.width,h=comic.height;ink.clearRect(0,0,w,h);if(!connected)return;
- // Low-contrast print dots belong to the base comic layer, not an action.
- ink.fillStyle=printPattern();ink.fillRect(0,0,w,h);
- ink.strokeStyle='#30253fcc';ink.lineWidth=10;ink.strokeRect(5,5,w-10,h-10);
-const energy=model.energy,amount=reduced.matches?0:Math.min(1,energy*1.4);if((amount>.04||effect==='ribbon')&&!reduced.matches){ink.strokeStyle=effect==='ribbon'?'#ec277fcc':'#30253f77';ink.lineWidth=effect==='ribbon'?5:2;const extent=effect==='ribbon'?.24:.06+amount*.12;for(let i=0;i<24;i++){const a=i*Math.PI*2/24+(time*.00004),x=Math.cos(a)*w,y=Math.sin(a)*h;ink.beginPath();ink.moveTo(w/2+x*.6,h/2+y*.6);ink.lineTo(w/2+x*(.6+extent),h/2+y*(.6+extent));ink.stroke();}}
- if(effect==='slice'){ink.strokeStyle='#fff9edee';ink.lineWidth=12;for(let i=0;i<5;i++){const offset=i*w*.24;ink.beginPath();ink.moveTo(offset-w*.2,0);ink.lineTo(offset+w*.45,h);ink.stroke();}}if(effect==='ball'){ink.fillStyle='#ffcb5766';ink.fillRect(0,0,w,h);ink.fillStyle=printPattern('ball');ink.fillRect(0,0,w,h);}if(effect==='splat'){ink.fillStyle='#158bff66';ink.fillRect(0,0,w,h);ink.strokeStyle='#e5faffbb';ink.lineWidth=3;for(let i=0;i<14;i++){const x=((i*139)%997)/997*w,y=reduced.matches?h*(i/14):h-((time*.06+i*89)%(h+60));ink.beginPath();ink.arc(x,y,8+i%4*5,0,Math.PI*2);ink.stroke();}}
- if(effect==='twist'){ink.fillStyle='#ce8aff22';ink.fillRect(0,0,w,h);if(!reduced.matches){ink.strokeStyle='#ffdb7677';ink.lineWidth=8;for(let i=0;i<5;i++){ink.beginPath();for(let t=0;t<70;t++){const a=t*.12+time*.001+i*1.25,r=t*Math.min(w,h)*.009,x=w/2+Math.cos(a)*r,y=h/2+Math.sin(a)*r;t?ink.lineTo(x,y):ink.moveTo(x,y);}ink.stroke();}}}}
-function animate(time){const dt=(time-last)/1000;last=time;model.tick(time);model.energy*=Math.exp(-dt*4);if(effect&&time>effectUntil)clearEffect();paintCamera(time);scene.render(dt,time,model.shape,model.energy,reduced.matches,model.pieces);drawComic(time);document.body.classList.toggle('dragging',connected&&!!model.drag);if(model.drag){const p=model.pieces.find(p=>p.id===model.drag.pieceId);dragMarker.style.left=(p.cx-model.drag.offset.x)*innerWidth+'px';dragMarker.style.top=(p.cy-model.drag.offset.y)*innerHeight+'px';}metrics.frames++;requestAnimationFrame(animate);}document.addEventListener('visibilitychange',()=>{if(document.hidden)reset();});window.addEventListener('blur',reset);window.addEventListener('pagehide',disconnect);reduced.addEventListener('change',clearEffect);window.jellyLab={scene,model,metrics,get camera(){return camera;},get connected(){return connected;},get effect(){return effect;}};resize();devices();requestAnimationFrame(animate);
+import {EffectInput} from './effect-input.js';
+import {CameraEffects} from './camera-effects.js';
+
+const $ = id => document.getElementById(id);
+const input = new EffectInput(), effects = new CameraEffects($('fx'));
+const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+const treatments = {
+  cover:['Cover Window','Frame the artwork with two hands. Pinch and release to change the cover.'],
+  riso:['Risograph','Spread your hands to separate the inks. Pinch and release for a new palette.'],
+  crt:['CRT','Move your hands through the picture. The signal settles when you stop.'],
+  dither:['One-bit Print','Spread your hands to change the dot size. Pinch and release to reverse the ink.'],
+  liquid:['Liquid Motion','Move your hands to stir the picture. Let it settle, then start again.'],
+  particles:['Particle Morph','Hold a pinch to scatter the form. Release to gather the next one.'],
+};
+const metrics = {frames:0,inferences:0,inferenceMs:[],resultAgeMs:[],frameMs:[],captureMs:[],maxPending:0};
+let connected=false,connecting=false,ready=false,worker=null,generation=0,connectionAttempt=0,frameId=0,pending=null,latest=null,aspect=16/9;
+let introDismissed=false,noticeTimer,last=performance.now(),synthetic=false,syntheticTime=null,sourceStartedAt=0;
+const now=()=>Math.max(performance.now(),syntheticTime??0,input.time??0);
+function sample(key,value){if(!Number.isFinite(value)||value<0)return;metrics[key].push(value);if(metrics[key].length>240)metrics[key].shift();}
+function message(text){$('notice').textContent=text;clearTimeout(noticeTimer);if(text)noticeTimer=setTimeout(()=>{$('notice').textContent='';},8000);}
+function cancelInput(){generation++;input.cancel(now());}
+function selectMode(mode){
+  if(!treatments[mode])return;
+  generation++;input.setMode(mode,now());document.body.dataset.activeEffect=mode;
+  for(const button of document.querySelectorAll('button[data-mode]'))button.setAttribute('aria-pressed',String(button.dataset.mode===mode));
+  $('effect-name').textContent=treatments[mode][0];$('effect-hint').textContent=treatments[mode][1];
+  $('mode-announcement').textContent=treatments[mode].join('. ');
+}
+function initializeTracker(){
+  if(worker)return;
+  worker=new Worker(new URL('./tracker-worker.js',import.meta.url),{type:'module'});
+  worker.onmessage=({data})=>{
+    if(data.type==='ready'){ready=true;return;}
+    if(data.type==='error'){ready=false;pending=null;cancelInput();message('Hand tracking could not start. Reload to retry.');return;}
+    if(data.id&&pending&&data.id.frame===pending.frame)pending=null;
+    if(data.type!=='result'||!data.id||data.id.generation!==generation||!connected||document.hidden)return;
+    const age=performance.now()-data.timestamp;
+    sample('inferenceMs',data.inferenceMs);sample('resultAgeMs',age);metrics.inferences++;
+    if(synthetic)return;
+    if(age>250){input.cancel(now());return;}
+    const screenAspect=innerWidth/innerHeight,cropX=(1-Math.min(1,screenAspect/aspect))/2,cropY=(1-Math.min(1,aspect/screenAspect))/2;
+    const hands=data.hands.map(hand=>({...hand,landmarks:hand.landmarks.map(p=>({...p,x:((1-p.x)-cropX)/(1-2*cropX),y:(p.y-cropY)/(1-2*cropY)}))}));
+    input.update(hands,now());
+  };
+  worker.onerror=()=>{ready=false;pending=null;cancelInput();message('Hand tracking stopped. Reload to retry.');};
+  worker.postMessage({type:'init'});
+}
+const camera=new BrowserCamera({
+  onFrame:async(bitmap,timestamp,capture={})=>{
+    if(!connected){bitmap.close();return;}
+    const previous=latest;latest=bitmap;effects.setFrame(bitmap);previous?.close();sample('captureMs',capture.bitmapMs);
+    if(!ready||pending||document.hidden)return;
+    const gen=generation,copy=await createImageBitmap(bitmap,{resizeWidth:640,resizeHeight:Math.round(640/aspect)});
+    if(!connected||generation!==gen||pending){copy.close();return;}
+    pending={frame:++frameId,generation:gen};metrics.maxPending=Math.max(metrics.maxPending,1);
+    worker.postMessage({type:'frame',bitmap:copy,timestamp,sourceAgeMs:performance.now()-timestamp,id:pending},[copy]);
+  },
+  onEnded:()=>{disconnect();message('Camera disconnected. Reconnect it to continue.');},
+  onError:()=>{cancelInput();message('Camera frames interrupted. Disconnect and reconnect the camera.');},
+});
+function disconnect(){
+  connectionAttempt++;connected=false;connecting=false;camera.stop();cancelInput();worker?.terminate();worker=null;ready=false;pending=null;
+  effects.clearFrame();latest?.close();latest=null;
+  document.body.classList.remove('connected','connecting');$('connect').textContent='Connect camera';$('empty').hidden=false;
+  $('empty-title').textContent='Make room for a little strange.';$('empty-copy').textContent='Connect your camera. Put your hands in the picture.';
+}
+async function connect(){
+  if(connected||connecting){disconnect();return;}
+  connecting=true;const session=++connectionAttempt;generation++;sourceStartedAt=performance.now();
+  document.body.classList.add('connecting');$('connect').textContent='Cancel';
+  $('empty-title').textContent='Opening your camera…';$('empty-copy').textContent='Allow camera access in your browser to begin.';message('');initializeTracker();
+  try{
+    const info=await camera.start($('device').value);if(!info||connectionAttempt!==session)return;
+    aspect=info.width/info.height;input.aspect=innerWidth/innerHeight;connected=true;connecting=false;
+    document.body.classList.remove('connecting');document.body.classList.add('connected');$('empty').hidden=true;$('connect').textContent='Disconnect';await devices();
+  }catch(error){
+    if(connectionAttempt!==session)return;disconnect();
+    message(error.name==='NotAllowedError'?'Allow camera access in your browser, then connect again.':['NotReadableError','AbortError'].includes(error.name)?'Camera busy. Close other camera apps, then connect again.':error.message);
+  }
+}
+async function devices(){
+  try{
+    const selected=$('device').value,list=(await navigator.mediaDevices?.enumerateDevices()||[]).filter(d=>d.kind==='videoinput');
+    $('device').replaceChildren(new Option('Default camera',''));for(const [i,d]of list.entries())$('device').add(new Option(d.label||'Camera '+(i+1),d.deviceId));
+    if(list.some(d=>d.deviceId===selected))$('device').value=selected;
+  }catch{message('Camera list unavailable. You can still connect the default camera.');}
+}
+function dismiss(){if(introDismissed)return;introDismissed=true;document.body.classList.add('intro-dismissed');const focused=$('intro').contains(document.activeElement);$('intro').hidden=true;if(focused)$('connect').focus({preventScroll:true});}
+for(const button of document.querySelectorAll('button[data-mode]'))button.onclick=()=>selectMode(button.dataset.mode);
+$('connect').onclick=connect;$('empty-connect').onclick=connect;$('device').onchange=()=>{if(connected||connecting)disconnect();};
+$('dismiss').onclick=dismiss;$('begin').onclick=()=>{dismiss();if(!connected&&!connecting)connect();};
+$('fullscreen').onclick=()=>{const action=document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen();action.catch(()=>message('Fullscreen is unavailable in this browser.'));};
+document.addEventListener('keydown',event=>{if(event.key==='Escape')dismiss();});
+navigator.mediaDevices?.addEventListener('devicechange',()=>{if(!connected&&!connecting)devices();});
+window.addEventListener('resize',()=>{effects.resize();input.aspect=innerWidth/innerHeight;cancelInput();});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)cancelInput();});
+window.addEventListener('blur',cancelInput);window.addEventListener('pagehide',disconnect);reduced.addEventListener('change',cancelInput);
+function animate(time){
+  const elapsed=time-last;last=time;const dt=Math.min(.05,Math.max(0,elapsed/1000));
+  if(connected)input.tick(synthetic?(syntheticTime??time):now());effects.render(dt,time,input.state,reduced.matches);
+  if(connected&&time-sourceStartedAt>1500)sample('frameMs',elapsed);metrics.frames++;requestAnimationFrame(animate);
+}
+// Private inspection hooks distinguish generated-camera checks from hardware evidence.
+window.effectsLab={input,effects,metrics,camera,selectMode,get connected(){return connected;},get mode(){return input.state.mode;},get pending(){return pending;},
+  setSyntheticInput(value){cancelInput();synthetic=Boolean(value);syntheticTime=null;},
+  applyHands(hands,time=performance.now()){if(!synthetic)throw Error('Enable synthetic inspection input first');syntheticTime=time;input.update(hands,time);},
+};
+selectMode('cover');effects.resize();devices();requestAnimationFrame(animate);

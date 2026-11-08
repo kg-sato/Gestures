@@ -22,7 +22,7 @@ function Run-Check([string]$Name, [string]$Executable, [string[]]$Arguments) {
     if ($code -ne 0) { throw "$Name failed (exit $code). See $logPath" }
 }
 try {
-    foreach ($required in @('tests\jelly-browser.mjs','models\hand_landmarker.task','node_modules\playwright-core\package.json')) {
+    foreach ($required in @('tests\effects-browser.mjs','models\hand_landmarker.task','node_modules\playwright-core\package.json')) {
         if (-not (Test-Path -LiteralPath (Join-Path $ProjectRoot $required))) { throw "Missing existing prerequisite: $required. Run the documented project setup separately." }
     }
     $pythonPath = Join-Path $ProjectRoot '.venv\Scripts\python.exe'
@@ -48,7 +48,7 @@ try {
     $env:GESTURES_TEST_URL = $url
     Push-Location $runRoot
     try {
-        Run-Check 'jelly-browser' 'node' @((Join-Path $ProjectRoot 'tests\jelly-browser.mjs'))
+        Run-Check 'effects-browser' 'node' @((Join-Path $ProjectRoot 'tests\effects-browser.mjs'))
         if (-not $SkipInspector) {
             $inspectRoot = Join-Path $runRoot 'inspection'
             & node (Join-Path $SkillRoot 'design-taste-frontend\scripts\inspect.mjs') $url --app --out $inspectRoot --widths 1440,768,390 --json 2> (Join-Path $runRoot 'taste-inspector-error.log') | Out-File (Join-Path $runRoot 'taste-inspector-output.json') -Encoding utf8
